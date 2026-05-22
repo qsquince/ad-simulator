@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>广告动态出价模拟器 | 最优控制 + 分时段CTR</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f5f7fb;
+            padding: 20px;
+            color: #1e2a3a;
+        }
+
+        .sim-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 28px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+            padding: 20px 24px 32px;
+        }
+
+        h2.sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0,0,0,0);
+            border: 0;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .title h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #185FA5, #2b7aaa);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: #5b6e8c;
+            margin-top: 4px;
+        }
+
+        .strat-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .strat-btn {
+            padding: 6px 18px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: 1px solid #cfdfed;
+            border-radius: 40px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #2c3e50;
+        }
+
+        .strat-btn.active {
+            background: #185FA5;
+            border-color: #185FA5;
+            color: white;
+            box-shadow: 0 2px 6px rgba(24,95,165,0.2);
+        }
+
+        .strat-desc {
+            background: #eef4fa;
+            padding: 12px 18px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: #1e4663;
+            margin-bottom: 24px;
+            border-left: 5px solid #185FA5;
+        }
+
+        /* 输入卡片网格 */
+        .inputs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .input-card {
+            background: #f9fafc;
+            border-radius: 20px;
+            padding: 12px 16px;
+            border: 1px solid #e9edf2;
+        }
+
+        .input-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: #5e7a93;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .input-row input[type="number"] {
+            font-size: 1.1rem;
+            font-weight: 600;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #0f2b3d;
+            width: 100px;
+            padding: 4px 0;
+        }
+
+        .input-unit {
+            font-size: 0.75rem;
+            color: #7c8ea0;
+        }
+
+        .slider-row {
+            margin-top: 10px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #185FA5;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .metric-card {
+            background: #ffffff;
+            border-radius: 20px;
+            padding: 14px 12px;
+            border: 1px solid #eef2f6;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .metric-label {
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: #6b85a2;
+            letter-spacing: 0.3px;
+        }
+
+        .metric-value {
+            font-size: 1.7rem;
+            font-weight: 700;
+            color: #0c2e42;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .metric-sub {
+            font-size: 0.7rem;
+            color: #8da0b5;
+        }
+
+        .roi-positive {
+            color: #0F6E56;
+        }
+        .roi-negative {
+            color: #993C1D;
+        }
+
+        .warning-badge {
+            background: #fff0e5;
+            color: #c73e1d;
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 40px;
+            display: inline-block;
+            margin-top: 8px;
+        }
+
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+
+        .chart-card {
+            background: white;
+            border: 1px solid #eef2f6;
+            border-radius: 24px;
+            padding: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+        }
+
+        .chart-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .legend-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 10px;
+            font-size: 0.7rem;
+        }
+
+        .legend-dot {
+            width: 16px;
+            height: 2px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+
+        .chart-wrap {
+            height: 220px;
+            position: relative;
+        }
+
+        .hourly-ctr-panel {
+            background: #f9fafc;
+            border-radius: 20px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            border: 1px solid #e9edf2;
+        }
+
+        .hourly-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .hourly-sliders {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .hour-item {
+            min-width: 60px;
+            text-align: center;
+            font-size: 0.7rem;
+        }
+
+        .hour-item input {
+            width: 100%;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        button {
+            background: white;
+            border: 1px solid #cad5e2;
+            padding: 8px 18px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #f0f4f9;
+            border-color: #9aafc4;
+        }
+
+        @media (max-width: 780px) {
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
+            .hourly-sliders {
+                grid-template-columns: repeat(24, 70px);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="sim-container">
+    <h2 class="sr-only">广告动态出价模拟器：分时段CTR + 动态最优控制出价</h2>
+
+    <div class="top-bar">
+        <div class="title">
+            <h1>📈 动态竞价模拟器</h1>
+            <div class="subtitle">最优控制出价 · 分时段CTR · 预算预警</div>
+        </div>
+        <div class="strat-tabs">
+            <button class="strat-btn" data-strat="steady">📊 匀速策略</button>
+            <button class="strat-btn" data-strat="aggressive">⚡ 激进策略</button>
+            <button class="strat-btn" data-strat="conservative">🐢 保守策略</button>
+            <button class="strat-btn active" data-strat="dynamic">🎯 动态最优控制 ✨</button>
+        </div>
+    </div>
+
+    <div class="strat-desc" id="stratDesc">动态策略：基于剩余预算进度与竞争对手出价，实时调整出价 (最优控制思想)。</div>
+
+    <!-- 基础参数 -->
+    <div class="inputs-grid">
+        <div class="input-card"><div class="input-label">每日预算</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="budget" value="1000" min="100" max="50000" step="100"></div><div class="slider-row"><input type="range" id="budgetSlider" min="100" max="10000" step="100" value="1000"></div></div>
+        <div class="input-card"><div class="input-label">基准CPC</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="cpc" value="2.5" min="0.5" max="50" step="0.1"></div><div class="slider-row"><input type="range" id="cpcSlider" min="0.5" max="30" step="0.2" value="2.5"></div></div>
+        <div class="input-card"><div class="input-label">平均转化率</div><div class="input-row"><input type="number" id="cvr" value="3.5" min="0.5" max="30" step="0.1"><span class="input-unit">%</span></div><div class="slider-row"><input type="range" id="cvrSlider" min="0.5" max="20" step="0.2" value="3.5"></div></div>
+        <div class="input-card"><div class="input-label">出价下限</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="bidMin" value="1.2" min="0.5" max="20" step="0.1"></div><div class="slider-row"><input type="range" id="bidMinSlider" min="0.5" max="20" step="0.2" value="1.2"></div></div>
+        <div class="input-card"><div class="input-label">出价上限</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="bidMax" value="6.0" min="0.5" max="50" step="0.1"></div><div class="slider-row"><input type="range" id="bidMaxSlider" min="1" max="30" step="0.5" value="6.0"></div></div>
+        <div class="input-card"><div class="input-label">客单价</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="orderVal" value="80" min="5" max="1000" step="5"></div><div class="slider-row"><input type="range" id="orderValSlider" min="10" max="400" step="5" value="80"></div></div>
+    </div>
+
+    <!-- 动态策略专用参数 (竞争对手 + 控制参数) -->
+    <div class="inputs-grid" id="dynamicParamsPanel" style="display: grid;">
+        <div class="input-card"><div class="input-label">🤖 竞争对手平均出价</div><div class="input-row"><span class="input-unit">¥</span><input type="number" id="compBid" value="3.0" min="0.5" max="30" step="0.2"></div><div class="slider-row"><input type="range" id="compBidSlider" min="0.5" max="20" step="0.2" value="3.0"></div></div>
+        <div class="input-card"><div class="input-label">⚙️ 竞争敏感度 α</div><div class="input-row"><input type="number" id="alpha" value="0.55" min="0" max="1.5" step="0.05"><span class="input-unit"></span></div><div class="slider-row"><input type="range" id="alphaSlider" min="0" max="1.5" step="0.02" value="0.55"></div></div>
+        <div class="input-card"><div class="input-label">⏱️ 预算节奏 β</div><div class="input-row"><input type="number" id="beta" value="0.25" min="-1" max="1" step="0.05"><span class="input-unit"></span></div><div class="slider-row"><input type="range" id="betaSlider" min="-1" max="1" step="0.02" value="0.25"></div></div>
+    </div>
+
+    <!-- 分时段CTR乘数（24h） -->
+    <div class="hourly-ctr-panel">
+        <div class="hourly-header">
+            <strong>⏰ 分时段CTR乘数 (24h)</strong>
+            <button id="resetHourlyBtn" type="button" style="padding:4px 12px;">重置早晚高峰</button>
+        </div>
+        <div class="hourly-sliders" id="hourlySlidersContainer"></div>
+        <div class="legend-row" style="margin-top: 10px;">💡 小时乘数影响点击率：高峰时段 >1.0，凌晨 <0.6 模拟真实流量波动</div>
+    </div>
+
+    <!-- KPI 卡片 -->
+    <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">📢 预估曝光</div><div class="metric-value" id="mImp">—</div><div class="metric-sub">次/天</div></div>
+        <div class="metric-card"><div class="metric-label">🖱️ 预估点击</div><div class="metric-value" id="mClk">—</div><div class="metric-sub">次/天</div></div>
+        <div class="metric-card"><div class="metric-label">✅ 预估转化</div><div class="metric-value" id="mCvt">—</div><div class="metric-sub">单/天</div></div>
+        <div class="metric-card"><div class="metric-label">💰 预估消耗</div><div class="metric-value" id="mSpend">—</div><div class="metric-sub" id="spendWarning"></div></div>
+        <div class="metric-card"><div class="metric-label">📈 预估 ROI</div><div class="metric-value" id="mRoi">—</div><div class="metric-sub">收入/消耗</div></div>
+        <div class="metric-card"><div class="metric-label">🎯 实际出价(avg)</div><div class="metric-value" id="mBid">—</div><div class="metric-sub">元/点击</div></div>
+    </div>
+
+    <!-- 趋势图 -->
+    <div class="charts-row">
+        <div class="chart-card"><div class="chart-title">7天 ROI 趋势 <span style="font-size:0.7rem;">(动态vs传统)</span></div><div class="legend-row"><span class="legend-item"><span class="legend-dot" style="background:#185FA5;"></span>匀速</span><span class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>激进</span><span class="legend-item"><span class="legend-dot" style="background:#1D9E75;"></span>保守</span><span class="legend-item"><span class="legend-dot" style="background:#8B5CF6;"></span>🎯动态策略</span></div><div class="chart-wrap"><canvas id="roiChart"></canvas></div></div>
+        <div class="chart-card"><div class="chart-title">7天 消耗趋势 (元)</div><div class="legend-row"><span class="legend-item"><span class="legend-dot" style="background:#185FA5;"></span>匀速</span><span class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>激进</span><span class="legend-item"><span class="legend-dot" style="background:#1D9E75;"></span>保守</span><span class="legend-item"><span class="legend-dot" style="background:#8B5CF6;"></span>动态策略</span></div><div class="chart-wrap"><canvas id="spendChart"></canvas></div></div>
+    </div>
+
+    <div class="actions">
+        <button id="resetBtn">⟳ 重置全部参数</button>
+        <button id="exportBtn">📸 导出图片</button>
+    </div>
+</div>
+
+<script>
+    // ------------- DOM 元素绑定 -------------
+    let currentStrat = 'dynamic';   // 默认动态
+    let roiChartInst, spendChartInst;
+    // 24小时乘数数组
+    let hourlyMultipliers = new Array(24).fill(1.0);
+    // 高峰预设 (早8-10 1.3, 晚18-21 1.4)
+    function setPeakPattern() {
+        for(let i=0;i<24;i++) hourlyMultipliers[i] = 1.0;
+        for(let i=8;i<=10;i++) hourlyMultipliers[i] = 1.3;
+        for(let i=18;i<=21;i++) hourlyMultipliers[i] = 1.4;
+        hourlyMultipliers[6] = 0.8;   // 早上6点
+        hourlyMultipliers[23] = 0.6;
+        hourlyMultipliers[0] = 0.4;
+        hourlyMultipliers[1] = 0.3;
+        hourlyMultipliers[2] = 0.3;
+        hourlyMultipliers[3] = 0.35;
+        hourlyMultipliers[4] = 0.5;
+        renderHourlySliders();
+    }
+
+    function renderHourlySliders() {
+        const container = document.getElementById('hourlySlidersContainer');
+        if(!container) return;
+        container.innerHTML = '';
+        for(let h=0;h<24;h++) {
+            const div = document.createElement('div');
+            div.className = 'hour-item';
+            div.innerHTML = `<div style="font-size:10px;">${h}:00</div>
+                             <input type="range" min="0.2" max="2.0" step="0.02" value="${hourlyMultipliers[h]}" data-hour="${h}" class="hourly-slider">`;
+            container.appendChild(div);
+        }
+        document.querySelectorAll('.hourly-slider').forEach(slider => {
+            slider.addEventListener('input', (e) => {
+                const hour = parseInt(e.target.dataset.hour);
+                hourlyMultipliers[hour] = parseFloat(e.target.value);
+                recalcAll();
+            });
+        });
+    }
+
+    // 策略配置（传统策略的静态乘数保留）
+    const staticStrategy = {
+        steady:   { bidMult:1.0,  ctrMult:1.0,  spendMult:1.0,  desc:'匀速策略：出价稳定，预算均匀消耗，适合稳定期。' },
+        aggressive: { bidMult:1.4, ctrMult:1.35, spendMult:1.25, desc:'激进策略：高出价抢量，消耗快，可能提前撞线。' },
+        conservative:{ bidMult:0.65,ctrMult:0.7, spendMult:0.6, desc:'保守策略：低价拿量，ROI平稳，量级有限。' }
+    };
+    const stratDescMap = {
+        dynamic: '🎯 动态最优控制策略：基于剩余预算进度与竞争对手出价，实时调价（PID/最优控制思想）。自动适应分时段CTR波动，避免预算过早耗尽。',
+        steady: staticStrategy.steady.desc,
+        aggressive: staticStrategy.aggressive.desc,
+        conservative: staticStrategy.conservative.desc
+    };
+
+    // 辅助函数
+    function g(id) { return parseFloat(document.getElementById(id)?.value) || 0; }
+    function fmtNum(n){ return n>=10000 ? (n/10000).toFixed(1)+'w' : Math.round(n).toLocaleString(); }
+
+    // ================= 核心模拟：分时段动态出价（按天逐小时） =================
+    // 返回某一天（dayIndex 0-6）的 {spend, revenue, avgBid, avgCtr, 是否撞线, 撞线小时}
+    function simulateDay(strategy, dayIdx, budget, baseCpc, cvr, bidMin, bidMax, orderVal, compBid, alpha, beta, hourlyMul) {
+        let remainingBudget = budget;
+        let totalSpend = 0;
+        let totalClicks = 0;
+        let totalRevenue = 0;
+        let hourBids = [];
+        let cutoffHour = 24;
+        let budgetExhausted = false;
+        // 日随机噪声 (轻微)
+        const dayNoise = 0.95 + Math.random()*0.1;
+        
+        for(let hour=0;hour<24;hour++) {
+            if(remainingBudget <= 1e-3) {
+                if(cutoffHour === 24) cutoffHour = hour;
+                budgetExhausted = true;
+                break;
+            }
+            // 分时段CTR乘数
+            const hourCtrMul = hourlyMul[hour];
+            // 基准ctr = 3.5% * 策略系数(传统) 或者动态根据策略调整
+            let baseCtr = 0.035;  // 平均3.5%
+            if(strategy !== 'dynamic') {
+                const cfg = staticStrategy[strategy];
+                baseCtr = 0.035 * cfg.ctrMult;
+            } else {
+                // 动态策略基础CTR无额外乘数，由分时段决定
+                baseCtr = 0.035;
+            }
+            const actualCtr = Math.min(0.35, baseCtr * hourCtrMul * dayNoise);
+            // 计算本小时出价
+            let hourBid;
+            if(strategy === 'dynamic') {
+                // 动态最优控制出价: 基于剩余预算比例和时间进度 + 竞争
+                const timeProgress = (hour+1)/24;    // 当前时间进度 (0..1)
+                const budgetProgress = (budget - remainingBudget) / budget;
+                const remainingRatio = 1 - budgetProgress;
+                let controlTerm = 1 + beta * (remainingRatio - timeProgress);
+                controlTerm = Math.min(1.8, Math.max(0.6, controlTerm));
+                // 竞争项
+                const compTerm = 1 + alpha * ((compBid - baseCpc)/Math.max(0.5, baseCpc));
+                let dynamicBid = baseCpc * compTerm * controlTerm;
+                dynamicBid = Math.min(bidMax, Math.max(bidMin, dynamicBid));
+                hourBid = dynamicBid;
+            } else {
+                const cfg = staticStrategy[strategy];
+                let rawBid = baseCpc * cfg.bidMult;
+                hourBid = Math.min(bidMax, Math.max(bidMin, rawBid));
+            }
+            hourBids.push(hourBid);
+            
+            // 预估本小时可用预算（假设平滑分配？实际按剩余预算和竞争来分配曝光机会）
+            // 采用“预期消耗 = 争取曝光量 * 出价” 模拟简单市场： 曝光机会 E = 1000 * hourCtrMul (流量波动)
+            const trafficPotential = 1800 * hourCtrMul;   // 基准小时曝光机会
+            const ecpm = hourBid * actualCtr * 1000;
+            // 获得曝光占比简化: 实际曝光 = min(流量潜力, 预算剩余可买曝光)
+            let maxImpressionByBudget = remainingBudget / hourBid * 1000;
+            let impressions = Math.min(trafficPotential, maxImpressionByBudget);
+            if(impressions <= 0) break;
+            let clicks = impressions * actualCtr;
+            let hourSpend = clicks * hourBid;
+            if(hourSpend > remainingBudget) {
+                hourSpend = remainingBudget;
+                clicks = hourSpend / hourBid;
+                impressions = clicks / actualCtr;
+                remainingBudget = 0;
+                totalSpend += hourSpend;
+                totalClicks += clicks;
+                totalRevenue += clicks * (cvr/100) * orderVal;
+                if(cutoffHour === 24) cutoffHour = hour+1;
+                break;
+            }
+            totalSpend += hourSpend;
+            totalClicks += clicks;
+            totalRevenue += clicks * (cvr/100) * orderVal;
+            remainingBudget -= hourSpend;
+        }
+        const avgBid = totalClicks > 0 ? totalSpend / totalClicks : 0;
+        const roi = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+        return { spend: totalSpend, revenue: totalRevenue, avgBid, clicks: totalClicks, roi, cutoffHour, exhausted: budgetExhausted };
+    }
+
+    // 一周趋势数据（7天）
+    function getWeeklyData(strategy) {
+        const budget = g('budget');
+        const baseCpc = g('cpc');
+        const cvr = g('cvr');
+        const bidMin = g('bidMin');
+        const bidMax = g('bidMax');
+        const orderVal = g('orderVal');
+        const compBid = g('compBid');
+        const alpha = g('alpha');
+        const beta = g('beta');
+        let daysSpend = [], daysRoi = [];
+        let totalSpendWeek = 0, totalRevenueWeek = 0;
+        for(let d=0;d<7;d++) {
+            const res = simulateDay(strategy, d, budget, baseCpc, cvr, bidMin, bidMax, orderVal, compBid, alpha, beta, hourlyMultipliers);
+            daysSpend.push(res.spend);
+            daysRoi.push(res.roi);
+            totalSpendWeek += res.spend;
+            totalRevenueWeek += res.revenue;
+        }
+        const weekRoi = totalSpendWeek > 0 ? totalRevenueWeek / totalSpendWeek : 0;
+        return { spend: daysSpend, roi: daysRoi, weekRoi };
+    }
+
+    // 计算当日主要指标（展示用）
+    function calcCurrentMetrics() {
+        const budget = g('budget');
+        const baseCpc = g('cpc');
+        const cvr = g('cvr');
+        const bidMin = g('bidMin');
+        const bidMax = g('bidMax');
+        const orderVal = g('orderVal');
+        const compBid = g('compBid');
+        const alpha = g('alpha');
+        const beta = g('beta');
+        const dayRes = simulateDay(currentStrat, 0, budget, baseCpc, cvr, bidMin, bidMax, orderVal, compBid, alpha, beta, hourlyMultipliers);
+        const impressionsEst = dayRes.clicks / (0.035 * (currentStrat==='dynamic'?1.0:(staticStrategy[currentStrat]?.ctrMult||1)) * (hourlyMultipliers.reduce((a,b)=>a+b,0)/24));
+        return {
+            spend: dayRes.spend,
+            clicks: dayRes.clicks,
+            conversions: dayRes.clicks * (cvr/100),
+            revenue: dayRes.revenue,
+            roi: dayRes.roi,
+            avgBid: dayRes.avgBid,
+            impressions: impressionsEst,
+            exhausted: dayRes.exhausted,
+            cutoffHour: dayRes.cutoffHour
+        };
+    }
+
+    // 更新UI指标
+    function updateUI() {
+        const m = calcCurrentMetrics();
+        document.getElementById('mImp').innerText = fmtNum(m.impressions);
+        document.getElementById('mClk').innerText = fmtNum(m.clicks);
+        document.getElementById('mCvt').innerText = fmtNum(m.conversions);
+        document.getElementById('mSpend').innerHTML = '¥'+fmtNum(m.spend);
+        const roiEl = document.getElementById('mRoi');
+        roiEl.innerText = m.roi.toFixed(2)+'x';
+        roiEl.className = 'metric-value ' + (m.roi>=1 ? 'roi-positive' : 'roi-negative');
+        document.getElementById('mBid').innerHTML = '¥'+ (m.avgBid).toFixed(2);
+        const warnSpan = document.getElementById('spendWarning');
+        if(currentStrat === 'aggressive' && m.exhausted && m.cutoffHour < 24) {
+            warnSpan.innerHTML = `<span class="warning-badge">⚠️ 激进策略预算于 ${m.cutoffHour}:00 耗尽</span>`;
+        } else if(currentStrat === 'dynamic' && m.exhausted && m.cutoffHour < 20) {
+            warnSpan.innerHTML = `<span class="warning-badge">⚠️ 动态策略预算于 ${m.cutoffHour}:00 撞线，可调高预算或降低β</span>`;
+        } else {
+            warnSpan.innerHTML = '';
+        }
+    }
+
+    // 更新所有图表
+    function updateCharts() {
+        const strategies = ['steady','aggressive','conservative','dynamic'];
+        const roiDataSets = [];
+        const spendDataSets = [];
+        strategies.forEach(s => {
+            const week = getWeeklyData(s);
+            roiDataSets.push({ label: s==='steady'?'匀速':s==='aggressive'?'激进':s==='conservative'?'保守':'动态策略', data: week.roi, borderColor: s==='steady'?'#185FA5':s==='aggressive'?'#D85A30':s==='conservative'?'#1D9E75':'#8B5CF6', borderDash: s==='dynamic'?[]:(s==='aggressive'?[6,3]:[]), borderWidth:2, pointRadius:3, tension:0.3, fill:false });
+            spendDataSets.push({ label: s==='steady'?'匀速':s==='aggressive'?'激进':s==='conservative'?'保守':'动态策略', data: week.spend, borderColor: s==='steady'?'#185FA5':s==='aggressive'?'#D85A30':s==='conservative'?'#1D9E75':'#8B5CF6', borderDash: s==='dynamic'?[]:(s==='aggressive'?[6,3]:[]), borderWidth:2, pointRadius:3, tension:0.3, fill:false });
+        });
+        if(roiChartInst) {
+            roiChartInst.data.datasets = roiDataSets;
+            roiChartInst.update();
+        }
+        if(spendChartInst) {
+            spendChartInst.data.datasets = spendDataSets;
+            spendChartInst.update();
+        }
+    }
+
+    function recalcAll() {
+        updateUI();
+        updateCharts();
+        syncSliders();
+    }
+
+    function syncSliders() {
+        ['budget','cpc','cvr','bidMin','bidMax','orderVal','compBid','alpha','beta'].forEach(id=>{
+            const inp = document.getElementById(id);
+            const slider = document.getElementById(id+'Slider');
+            if(slider && inp) slider.value = inp.value;
+        });
+    }
+
+    function setStrategy(s) {
+        currentStrat = s;
+        document.querySelectorAll('.strat-btn').forEach(btn => {
+            if(btn.dataset.strat === s) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+        document.getElementById('stratDesc').innerText = stratDescMap[s] || '';
+        // 动态参数面板显示/隐藏
+        const dynamicPanel = document.getElementById('dynamicParamsPanel');
+        if(s === 'dynamic') dynamicPanel.style.display = 'grid';
+        else dynamicPanel.style.display = 'none';
+        recalcAll();
+    }
+
+    // 重置参数及小时曲线
+    function resetAllParameters() {
+        document.getElementById('budget').value = 1000;
+        document.getElementById('cpc').value = 2.5;
+        document.getElementById('cvr').value = 3.5;
+        document.getElementById('bidMin').value = 1.2;
+        document.getElementById('bidMax').value = 6.0;
+        document.getElementById('orderVal').value = 80;
+        document.getElementById('compBid').value = 3.0;
+        document.getElementById('alpha').value = 0.55;
+        document.getElementById('beta').value = 0.25;
+        setPeakPattern();
+        ['budget','cpc','cvr','bidMin','bidMax','orderVal','compBid','alpha','beta'].forEach(id=>{
+            const slider = document.getElementById(id+'Slider');
+            if(slider) slider.value = document.getElementById(id).value;
+        });
+        setStrategy('dynamic');
+    }
+
+    // 导出图片
+    function exportAsImage() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1000; canvas.height = 700;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0,0,1000,700);
+        ctx.fillStyle = '#1f2f3f';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillText('广告动态出价模拟报告', 30, 45);
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = '#2d4e6e';
+        const m = calcCurrentMetrics();
+        ctx.fillText(`策略：${currentStrat==='dynamic'?'动态最优控制':(currentStrat==='steady'?'匀速':currentStrat==='aggressive'?'激进':'保守')}`, 30, 85);
+        ctx.fillText(`预算¥${g('budget')} | 基准CPC¥${g('cpc')} | 转化率${g('cvr')}% | 客单价¥${g('orderVal')}`, 30, 115);
+        ctx.fillText(`预估消耗¥${fmtNum(m.spend)} | ROI ${m.roi.toFixed(2)}x | 实际出价¥${m.avgBid.toFixed(2)}`, 30, 145);
+        const roiCanvas = document.getElementById('roiChart');
+        const spendCanvas = document.getElementById('spendChart');
+        if(roiCanvas) ctx.drawImage(roiCanvas, 30, 180, 450, 220);
+        if(spendCanvas) ctx.drawImage(spendCanvas, 520, 180, 450, 220);
+        ctx.fillStyle = '#aaa';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('ROI趋势（7天）', 30, 172);
+        ctx.fillText('消耗趋势（7天）', 520, 172);
+        const link = document.createElement('a');
+        link.download = `ad_strategy_${currentStrat}_${new Date().toISOString().slice(0,19)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+
+    // 初始化chart
+    function initCharts() {
+        const roiCtx = document.getElementById('roiChart').getContext('2d');
+        const spendCtx = document.getElementById('spendChart').getContext('2d');
+        roiChartInst = new Chart(roiCtx, { type: 'line', data: { labels: ['D1','D2','D3','D4','D5','D6','D7'], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}x` } } } } });
+        spendChartInst = new Chart(spendCtx, { type: 'line', data: { labels: ['D1','D2','D3','D4','D5','D6','D7'], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ¥${ctx.parsed.y.toFixed(0)}` } } } } });
+    }
+
+    // 事件绑定
+    function bindEvents() {
+        document.querySelectorAll('.strat-btn').forEach(btn => btn.addEventListener('click', (e) => setStrategy(btn.dataset.strat)));
+        const inputs = ['budget','cpc','cvr','bidMin','bidMax','orderVal','compBid','alpha','beta'];
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            const slider = document.getElementById(id+'Slider');
+            if(el) el.addEventListener('input', () => recalcAll());
+            if(slider) slider.addEventListener('input', (e) => { document.getElementById(id).value = e.target.value; recalcAll(); });
+        });
+        document.getElementById('resetBtn').addEventListener('click', resetAllParameters);
+        document.getElementById('exportBtn').addEventListener('click', exportAsImage);
+        document.getElementById('resetHourlyBtn').addEventListener('click', () => { setPeakPattern(); recalcAll(); });
+    }
+
+    // 启动
+    setPeakPattern();
+    initCharts();
+    bindEvents();
+    setStrategy('dynamic');
+</script>
+</body>
+</html>
