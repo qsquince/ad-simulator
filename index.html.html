@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>广告动态出价模拟器 | 最优控制 + 分时段CTR</title>
+    <title>AdBoost 动态出价模拟器 | 策略产品原型</title>
     <!-- Chart.js CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <style>
@@ -100,6 +100,16 @@
             border-left: 5px solid #185FA5;
         }
 
+        /* 产品说明浮层 */
+        .product-badge {
+            background: #EFF6FF;
+            border-left: 4px solid #185FA5;
+            padding: 12px 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
         /* 输入卡片网格 */
         .inputs-grid {
             display: grid;
@@ -160,7 +170,7 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
             gap: 14px;
-            margin-bottom: 28px;
+            margin-bottom: 16px;
         }
 
         .metric-card {
@@ -207,6 +217,15 @@
             border-radius: 40px;
             display: inline-block;
             margin-top: 8px;
+        }
+
+        .strategy-tip-card {
+            background: #F0FDF4;
+            border-radius: 20px;
+            padding: 12px 20px;
+            margin: 16px 0 20px 0;
+            border: 1px solid #C6F6D5;
+            font-size: 0.9rem;
         }
 
         .charts-row {
@@ -321,11 +340,20 @@
 </head>
 <body>
 <div class="sim-container">
-    <h2 class="sr-only">广告动态出价模拟器：分时段CTR + 动态最优控制出价</h2>
+    <h2 class="sr-only">AdBoost 动态出价模拟器：分时段CTR + 动态最优控制出价</h2>
+
+    <!-- 产品说明浮层 -->
+    <div class="product-badge">
+        <strong>📌 AdBoost 策略模拟器 · 产品定位</strong><br>
+        面向中小广告主：预算有限、流量分时波动、不知如何动态出价。<br>
+        ✅ 对比4种出价策略（匀速/激进/保守/动态最优）<br>
+        ✅ 支持24小时CTR乘数调节，模拟真实流量峰谷<br>
+        ✅ 预测7天ROI & 消耗趋势，辅助投放决策
+    </div>
 
     <div class="top-bar">
         <div class="title">
-            <h1>📈 动态竞价模拟器</h1>
+            <h1>📈 AdBoost 动态竞价模拟器</h1>
             <div class="subtitle">最优控制出价 · 分时段CTR · 预算预警</div>
         </div>
         <div class="strat-tabs">
@@ -375,6 +403,12 @@
         <div class="metric-card"><div class="metric-label">🎯 实际出价(avg)</div><div class="metric-value" id="mBid">—</div><div class="metric-sub">元/点击</div></div>
     </div>
 
+    <!-- 策略建议卡片（实时） -->
+    <div class="strategy-tip-card" id="strategyTipCard">
+        <strong>🧠 策略建议（实时）</strong><br>
+        <span id="strategyTip">正在分析当前策略表现…</span>
+    </div>
+
     <!-- 趋势图 -->
     <div class="charts-row">
         <div class="chart-card"><div class="chart-title">7天 ROI 趋势 <span style="font-size:0.7rem;">(动态vs传统)</span></div><div class="legend-row"><span class="legend-item"><span class="legend-dot" style="background:#185FA5;"></span>匀速</span><span class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>激进</span><span class="legend-item"><span class="legend-dot" style="background:#1D9E75;"></span>保守</span><span class="legend-item"><span class="legend-dot" style="background:#8B5CF6;"></span>🎯动态策略</span></div><div class="chart-wrap"><canvas id="roiChart"></canvas></div></div>
@@ -383,7 +417,7 @@
 
     <div class="actions">
         <button id="resetBtn">⟳ 重置全部参数</button>
-        <button id="exportBtn">📸 导出图片</button>
+        <button id="exportBtn">📸 导出图片报告</button>
     </div>
 </div>
 
@@ -446,7 +480,7 @@
     function fmtNum(n){ return n>=10000 ? (n/10000).toFixed(1)+'w' : Math.round(n).toLocaleString(); }
 
     // ================= 核心模拟：分时段动态出价（按天逐小时） =================
-    // 返回某一天（dayIndex 0-6）的 {spend, revenue, avgBid, avgCtr, 是否撞线, 撞线小时}
+    // 返回某一天（dayIndex 0-6）的 {spend, revenue, avgBid, clicks, roi, cutoffHour, exhausted}
     function simulateDay(strategy, dayIdx, budget, baseCpc, cvr, bidMin, bidMax, orderVal, compBid, alpha, beta, hourlyMul) {
         let remainingBudget = budget;
         let totalSpend = 0;
@@ -497,11 +531,8 @@
             }
             hourBids.push(hourBid);
             
-            // 预估本小时可用预算（假设平滑分配？实际按剩余预算和竞争来分配曝光机会）
-            // 采用“预期消耗 = 争取曝光量 * 出价” 模拟简单市场： 曝光机会 E = 1000 * hourCtrMul (流量波动)
+            // 预估本小时可用预算（简单市场模型）
             const trafficPotential = 1800 * hourCtrMul;   // 基准小时曝光机会
-            const ecpm = hourBid * actualCtr * 1000;
-            // 获得曝光占比简化: 实际曝光 = min(流量潜力, 预算剩余可买曝光)
             let maxImpressionByBudget = remainingBudget / hourBid * 1000;
             let impressions = Math.min(trafficPotential, maxImpressionByBudget);
             if(impressions <= 0) break;
@@ -564,7 +595,10 @@
         const alpha = g('alpha');
         const beta = g('beta');
         const dayRes = simulateDay(currentStrat, 0, budget, baseCpc, cvr, bidMin, bidMax, orderVal, compBid, alpha, beta, hourlyMultipliers);
-        const impressionsEst = dayRes.clicks / (0.035 * (currentStrat==='dynamic'?1.0:(staticStrategy[currentStrat]?.ctrMult||1)) * (hourlyMultipliers.reduce((a,b)=>a+b,0)/24));
+        const avgHourCtrMul = hourlyMultipliers.reduce((a,b)=>a+b,0)/24;
+        let expectedCtr = 0.035;
+        if(currentStrat !== 'dynamic') expectedCtr = 0.035 * staticStrategy[currentStrat].ctrMult;
+        const impressionsEst = dayRes.clicks / (expectedCtr * avgHourCtrMul);
         return {
             spend: dayRes.spend,
             clicks: dayRes.clicks,
@@ -576,6 +610,26 @@
             exhausted: dayRes.exhausted,
             cutoffHour: dayRes.cutoffHour
         };
+    }
+
+    // 更新策略建议文本
+    function updateStrategyTip() {
+        const m = calcCurrentMetrics();
+        let tip = '';
+        if(currentStrat === 'dynamic') {
+            if(m.roi >= 1.2) tip = '🎯 动态策略当前ROI优秀 (≥1.2x)，且预算消耗平滑，强烈推荐作为主力策略。';
+            else if(m.roi >= 0.9) tip = '📈 动态策略ROI处于合理区间，可微调α/β参数进一步优化。';
+            else tip = '⚠️ 动态策略ROI偏低，请检查出价上下限或竞争参数α。';
+        } else if(currentStrat === 'aggressive') {
+            if(m.exhausted && m.cutoffHour < 18) tip = '⚠️ 激进策略预算过早耗尽（<18点），建议提高预算或切换动态策略。';
+            else if(m.roi > 1.1) tip = '⚡ 激进策略ROI尚可，但注意预算撞线风险，可A/B测试动态策略。';
+            else tip = '📉 激进策略ROI偏低且消耗快，不建议长期使用。';
+        } else if(currentStrat === 'steady') {
+            tip = '📊 匀速策略表现平稳，但ROI通常低于动态策略，建议切换动态策略试投。';
+        } else if(currentStrat === 'conservative') {
+            tip = '🐢 保守策略量级较小，适合品牌曝光或强预算约束场景，ROI提升空间有限。';
+        }
+        document.getElementById('strategyTip').innerText = tip;
     }
 
     // 更新UI指标
@@ -597,6 +651,7 @@
         } else {
             warnSpan.innerHTML = '';
         }
+        updateStrategyTip();
     }
 
     // 更新所有图表
@@ -666,32 +721,59 @@
         setStrategy('dynamic');
     }
 
-    // 导出图片
+    // 导出图片（增强版：包含策略建议）
     function exportAsImage() {
         const canvas = document.createElement('canvas');
-        canvas.width = 1000; canvas.height = 700;
+        canvas.width = 1000; canvas.height = 780;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0,0,1000,700);
+        ctx.fillRect(0,0,1000,780);
         ctx.fillStyle = '#1f2f3f';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.fillText('广告动态出价模拟报告', 30, 45);
-        ctx.font = '13px sans-serif';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.fillText('AdBoost 动态出价模拟报告', 30, 45);
+        ctx.font = '14px sans-serif';
         ctx.fillStyle = '#2d4e6e';
         const m = calcCurrentMetrics();
-        ctx.fillText(`策略：${currentStrat==='dynamic'?'动态最优控制':(currentStrat==='steady'?'匀速':currentStrat==='aggressive'?'激进':'保守')}`, 30, 85);
-        ctx.fillText(`预算¥${g('budget')} | 基准CPC¥${g('cpc')} | 转化率${g('cvr')}% | 客单价¥${g('orderVal')}`, 30, 115);
-        ctx.fillText(`预估消耗¥${fmtNum(m.spend)} | ROI ${m.roi.toFixed(2)}x | 实际出价¥${m.avgBid.toFixed(2)}`, 30, 145);
+        const strategyName = currentStrat==='dynamic'?'动态最优控制':(currentStrat==='steady'?'匀速':currentStrat==='aggressive'?'激进':'保守');
+        ctx.fillText(`策略：${strategyName}`, 30, 85);
+        ctx.fillText(`预算：¥${g('budget')}  |  基准CPC：¥${g('cpc')}  |  转化率：${g('cvr')}%  |  客单价：¥${g('orderVal')}`, 30, 115);
+        ctx.fillText(`当日预估消耗：¥${fmtNum(m.spend)}  |  ROI：${m.roi.toFixed(2)}x  |  实际出价：¥${m.avgBid.toFixed(2)}`, 30, 145);
+        // 策略建议
+        const tipText = document.getElementById('strategyTip').innerText;
+        ctx.fillStyle = '#0F6E56';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText('📌 策略建议：', 30, 180);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#1e4663';
+        // 自动换行
+        const maxWidth = 920;
+        let words = tipText.split('');
+        let line = '';
+        let y = 200;
+        for(let i=0; i<words.length; i++) {
+            let testLine = line + words[i];
+            let metrics = ctx.measureText(testLine);
+            if(metrics.width > maxWidth && line.length > 0) {
+                ctx.fillText(line, 30, y);
+                line = words[i];
+                y += 18;
+            } else {
+                line = testLine;
+            }
+        }
+        ctx.fillText(line, 30, y);
+        y += 30;
+        // 嵌入两个图表截图
         const roiCanvas = document.getElementById('roiChart');
         const spendCanvas = document.getElementById('spendChart');
-        if(roiCanvas) ctx.drawImage(roiCanvas, 30, 180, 450, 220);
-        if(spendCanvas) ctx.drawImage(spendCanvas, 520, 180, 450, 220);
+        if(roiCanvas) ctx.drawImage(roiCanvas, 30, y, 450, 200);
+        if(spendCanvas) ctx.drawImage(spendCanvas, 520, y, 450, 200);
         ctx.fillStyle = '#aaa';
         ctx.font = '10px sans-serif';
-        ctx.fillText('ROI趋势（7天）', 30, 172);
-        ctx.fillText('消耗趋势（7天）', 520, 172);
+        ctx.fillText('ROI趋势（7天）', 30, y-8);
+        ctx.fillText('消耗趋势（7天）', 520, y-8);
         const link = document.createElement('a');
-        link.download = `ad_strategy_${currentStrat}_${new Date().toISOString().slice(0,19)}.png`;
+        link.download = `AdBoost_${strategyName}_${new Date().toISOString().slice(0,19)}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
     }
