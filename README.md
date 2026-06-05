@@ -11,7 +11,7 @@
 - 预算撞线预警 + 策略建议
 
 ## 在线体验
- https://github.com/qsquince/ad-simulator
+ https://qsquince.github.io/ad-simulator/
 
 ## 产品设计思路（重点）
 - **动态策略算法**：结合预算进度（β）和竞争对手出价（α），实时调整出价，避免预算过早耗尽。
