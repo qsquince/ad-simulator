@@ -17,7 +17,8 @@
 - **动态策略算法**：结合预算进度（β）和竞争对手出价（α），实时调整出价，避免预算过早耗尽。
 - **交互设计**：参数滑杆实时联动，导出图片报告，降低使用门槛。
 - **适用场景**：电商拉新、App 买量、本地生活投放。
--   <img width="1000" height="780" alt="AdBoost_动态最优控制_2026-06-05T03_39_31" src="https://github.com/user-attachments/assets/01a735b3-b2fe-4436-8892-2019e8818413" />
+- <img width="1000" height="780" alt="AdBoost_动态最优控制_2026-06-05T03_39_31" src="https://github.com/user-attachments/assets/bea1d8b8-7558-4d89-89d0-32d6b4a176f1" />
+
 ## 下一步迭代
 - 接入历史日志数据模拟更精准
 - 增加 A/B 测试报告自动生成
